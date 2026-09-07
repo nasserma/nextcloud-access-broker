@@ -52,6 +52,27 @@ def _self_root_name(username: str) -> str:
     return username
 
 
+def _self_reference_paths(username: str, requested: str) -> set[str]:
+    """D6b: full DAV paths that denote the LISTED folder itself.
+
+    webdav3 includes the requested folder as the first listing entry.
+    The old filter caught only the root case (name == username); a
+    non-root listing therefore showed the folder itself as its first
+    entry (live evidence Sep 7: listing 'Projects' began with 'dir
+    Projects'). The self entry's path is the requested folder's own
+    path; path equality distinguishes it from any child, including a
+    child that shares the folder's name ('a/b' may legitimately
+    contain a child 'a/b/b'). Two prefix shapes cover webdav3
+    variants: root-relative (/files/<user>/...) and full DAV path
+    (/remote.php/dav/files/<user>/...).
+    """
+    norm = requested.strip("/")
+    base = f"/files/{username}"
+    if not norm:
+        return {base, f"/remote.php/dav{base}"}
+    return {f"{base}/{norm}", f"/remote.php/dav{base}/{norm}"}
+
+
 def _entry_name(info: dict, username: str) -> str | None:
     """Derive a clean entry name: prefer 'name', fall back to the last
     path segment of 'path' (webdav3 gives name=None for dirs)."""
@@ -121,10 +142,18 @@ class WebDavAdapter:
 
             raise WebDavError(_status_from(exc), "listing failed") from exc
         entries = []
-        # Non-dict info rows and self-root entries are skipped: a listing
-        # must only ever contain real user-visible entries.
+        # Non-dict info rows and self-reference entries are skipped: a
+        # listing must only ever contain real user-visible entries. D6b:
+        # the self entry is identified by full PATH equality (the listed
+        # folder's own DAV path), not by name — a name-based filter only
+        # caught the root case and left every non-root listing showing
+        # the folder itself as its first entry.
+        self_paths = _self_reference_paths(self._username, path)
         for info in infos or []:
             if not isinstance(info, dict):
+                continue
+            entry_path = str(info.get("path") or "").rstrip("/")
+            if entry_path in self_paths:
                 continue
             name = _entry_name(info, self._username)
             if name is None:

@@ -46,17 +46,29 @@ _HELP_TEXT = """**How to decide**
 
 **Commands** — type in this room:
 `approve <id> [items] [expiry]` — e.g. `approve 3 8h`, `approve 3 1,2 30m`
-`reject <id>` · `revoke <id>` · `undo <id>` (15s after a reject/revoke) · `status`
+`reject <id>` · `revoke <id>` · `revoke <instance>` · `revoke all` ·
+`undo <id>` (15s after a reject/revoke) · `status`
 
 `<required>` `[optional]`. The **#** shown in messages is **not part** of
 the id: type `approve 3`, never `approve #3`. Expiry: `8h`, `30m`, `2d`."""
 
 _REPLY_RE = re.compile(
-    r"^(approve|reject|revoke|undo|status)\s*(\d+)?"
+    r"^(approve|reject|revoke|undo|status)\s*(\d+|[a-z_][a-z0-9_-]*)?"
     r"(?:\s+([\d,]+))?"  # item numbers
     r"(?:\s+(\d{1,3}[hmd]))?$",
     re.IGNORECASE,
 )
+"""Group 2: request number, or (D6h) a bare target word for 'revoke
+all|<instance>'. Anything not matched downstream falls back to None
+(unknown command teacher)."""
+
+_REVOKE_TARGET_RE = re.compile(
+    r"^revoke\s+(all|([a-z0-9][a-z0-9_-]*))$",
+    re.IGNORECASE,
+)
+"""D6h: 'revoke all' and 'revoke <instance>' — typed-reply mass
+revocation. Instance names share the config-key charset (lowercase
+alphanumeric, hyphen, underscore); 'all' is reserved."""
 
 
 def parse_reply(text: str):
@@ -78,6 +90,19 @@ def parse_reply(text: str):
     if action == "status":
         return ("status", None, None, None)
     if number is None:
+        return None
+    if action != "revoke" and not number.isdigit():
+        return None  # D6h: word targets are revoke-only ('approve xx' stays garbage)
+    if action == "revoke" and not number.isdigit():
+        # D6h: 'revoke all' / 'revoke <instance>' — mass revocation by
+        # target. Distinct actions so handle_reply routes them without
+        # touching numeric-revoke handling.
+        m2 = _REVOKE_TARGET_RE.match(text.strip())
+        if m2:
+            target = m2.group(1).lower()
+            if target == "all":
+                return ("revoke_all", None, None, None)
+            return ("revoke_instance", target, None, None)
         return None
     rid = int(number)
     if rid <= 0:
@@ -262,7 +287,7 @@ class ApprovalBot:
             return
         parsed = parse_reply(text)
         if parsed is None:
-            # Unknown command: teach, don't dump. A close match gets a
+            # Unknown command: teach, don't dump.: teach, don't dump. A close match gets a
             # one-line suggestion; pure garbage gets the full help.
             first_word = text.strip().split(" ", 1)[0] if text.strip() else ""
             closest = closest_command(first_word)
@@ -279,7 +304,13 @@ class ApprovalBot:
         if action == "status":
             await self._post_summary()
             return
-        assert rid is not None  # parse_reply guarantees id for non-status
+        if action == "revoke_all":
+            await self._revoke_many(None, sender)
+            return
+        if action == "revoke_instance":
+            await self._revoke_many(rid, sender)  # rid carries the instance name here
+            return
+        assert rid is not None or action in ("revoke_all", "revoke_instance")  # parse_reply guarantees payload
         if action == "undo":
             await self._undo(rid, sender)
             return
@@ -401,6 +432,49 @@ class ApprovalBot:
             head += f"\n\nMistake? `undo {rec.id}` within {UNDO_GRACE_SECONDS}s re-opens it as a new request."
         return head + "\n\n———\n\n" + self._status_text()
 
+    async def _revoke_many(self, instance: str | None, sender: str):
+        """D6h: mass revocation. instance=None means 'revoke all' (every
+        active grant, every instance); a name means every active grant
+        on that instance. Revokes one at a time through the store (each
+        state transition individually valid and logged), then posts ONE
+        summary. An unknown instance revokes nothing and says so — the
+        approver sees the zero, not silence (no-silent-decisions
+        invariant)."""
+        active = self._store.active_grants(instance=instance)
+        if instance is not None and not active:
+            # Distinguish 'no grants' from 'no such instance' using the
+            # configured allowlist when available.
+            allowed = getattr(self._store, "allowed_instances", None)
+            if allowed is not None and instance not in allowed:
+                await self._transport.send_message(
+                    self._room, f"Unknown instance '{instance}'."
+                )
+                return
+        revoked = []
+        for rec in active:
+            try:
+                self._store.revoke(rec.id)
+            except (ValueError, LookupError):
+                # Expired between listing and revoking: skip, count the rest.
+                continue
+            logger.info(
+                "decision: rid=%d action=revoke outcome=revoked sender=%s target=%s",
+                rec.id, sender, instance or "all",
+            )
+            revoked.append(rec.id)
+        if not revoked:
+            await self._transport.send_message(
+                self._room,
+                f"Nothing to revoke ({'all instances' if instance is None else instance}).",
+            )
+            return
+        ids = ", ".join(f"#{i}" for i in revoked)
+        await self._transport.send_message(
+            self._room,
+            f"**Revoked {len(revoked)} grant(s)** ({ids}).\n\n———\n\n"
+            + self._status_text(),
+        )
+
     async def _revoke(self, rid: int, sender: str):
         """Operator kill switch: route revoke to the store (works on
         pending AND active grants) and confirm in the room. One
@@ -471,7 +545,10 @@ class ApprovalBot:
         if pending:
             footer_parts.append("Decide a request: `approve|reject <id> [expiry]`")
         if active:
-            footer_parts.append("Revise: `undo <id>` (15s) · Kill: `revoke <id>`")
+            footer_parts.append(
+                "Revise: `undo <id>` (15s) · Kill: `revoke <id>` "
+                "(mass: `revoke <instance>` / `revoke all`)"
+            )
         if footer_parts:
             lines.append("")
             lines.append(" · ".join(footer_parts))

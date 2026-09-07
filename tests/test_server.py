@@ -367,7 +367,7 @@ async def test_agent_app_hides_content_tools(server):
     mcp = build_app(server)
     names = sorted(t.name for t in await mcp.list_tools())
     assert names == sorted([
-        "request_access", "check_access", "list", "move", "trash", "mkdir",
+        "request_access", "check_access", "list_instances", "list", "move", "trash", "mkdir",
     ])
     # checkout/checkin are transfer-surface only
     assert "checkout" not in names and "checkin" not in names
@@ -443,7 +443,7 @@ async def test_build_app_default_registers_agent_surface(server):
     mcp = build_app(server)
     names = sorted(t.name for t in await mcp.list_tools())
     assert names == sorted([
-        "request_access", "check_access", "list", "move", "trash", "mkdir",
+        "request_access", "check_access", "list_instances", "list", "move", "trash", "mkdir",
     ])
     # checkout/checkin are transfer-surface only
     assert "checkout" not in names and "checkin" not in names

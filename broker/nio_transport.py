@@ -176,9 +176,17 @@ class BotListener:
         first = True
         while True:
             try:
+                # D6g fix: full_state=False on the first sync too. The
+                # old full_state=True re-delivered the room's whole
+                # timeline after a restart, replaying every historical
+                # reaction into handle_reaction (x7 'already decided'
+                # errors live, Sep 7). The state machine refused them
+                # all, but replay is noise and must not fire at all.
+                # Room state needed for dispatch (room membership) is
+                # carried by on_invite, not by full_state.
                 resp = await self._client.sync(
                     timeout=sweep_interval_s * 1000, since=self._since,
-                    full_state=first,
+                    full_state=False,
                 )
                 first = False
                 if hasattr(resp, "next_batch"):

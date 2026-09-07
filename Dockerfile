@@ -5,9 +5,14 @@
 
 FROM python:3.12-slim AS builder
 WORKDIR /build
+# D6h: bake the source revision into the image for traceable builds
+# ('docker compose build --build-arg GIT_COMMIT=$(git rev-parse HEAD)').
+# The server reports it alongside the package version when present.
+ARG GIT_COMMIT=unknown
 COPY pyproject.toml ./
 COPY broker ./broker
-RUN pip install --no-cache-dir --prefix=/install .
+RUN pip install --no-cache-dir --prefix=/install . \
+    && echo -n "${GIT_COMMIT}" > /install/lib/python3.12/site-packages/broker/COMMIT
 
 FROM python:3.12-slim
 # non-root runtime user

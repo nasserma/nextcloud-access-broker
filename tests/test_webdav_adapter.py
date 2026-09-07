@@ -35,10 +35,11 @@ def test_propfind_maps_list(dav, monkeypatch):
     patch_method(monkeypatch, "list", fake_list)
     out = dav.propfind("Documents")
     assert captured["path"] == "Documents"
+    # D6b: the listed folder's own self-reference entry is filtered;
+    # only real children remain.
     names = [e["name"] for e in out["entries"]]
-    assert names == ["Documents", "readme.md"]
-    assert out["entries"][0]["type"] == "dir"
-    assert out["entries"][1]["type"] == "file"
+    assert names == ["readme.md"]
+    assert out["entries"][0]["type"] == "file"
 
 
 def test_propfind_root_uses_default(dav, monkeypatch):

@@ -12,7 +12,8 @@ operation is audit-logged before it runs.
 
 - **Grants:** per-task batches of paths with read/write modes,
   approved by the owner in a private Matrix room (emoji reactions;
-  typed replies for partial approval, custom expiry, revoke).
+  typed replies for partial approval, custom expiry, revoke, and
+  mass revoke: `revoke <instance>` / `revoke all`).
   Grants expire after 24h by default, request numbers work once,
   revocation is instant, nothing renews itself, and the agent holds
   no standing access of any kind.
@@ -97,11 +98,12 @@ token configured in the broker's `config.yaml` on the host.
 ## Tools
 
 **Agent surface (`/mcp`, agent token):** `request_access` (batch:
-instance, reason, items[{path, mode}]), `check_access`, `list`
-(free under discovery), `move`, `trash`, `mkdir`. The content tools
-(`read`, `write`) are not registered on this surface, so an agent
-can neither see nor call them (D5: file content never transits the
-LLM context window).
+instance, reason, items[{path, mode}]), `check_access`,
+`list_instances` (configured instance names + discovery flags; no
+URLs or credentials — D6.5), `list` (free under discovery), `move`,
+`trash`, `mkdir`. The content tools (`read`, `write`) are not
+registered on this surface, so an agent can neither see nor call
+them (D5: file content never transits the LLM context window).
 
 **Transfer surface (`/transfer`, transfer token, CLI only):**
 `check_access`, `read`, `write`, `checkout`, `checkin`. These are

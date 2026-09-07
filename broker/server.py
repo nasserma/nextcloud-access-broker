@@ -73,6 +73,15 @@ def build_server(settings: dict) -> MCPServer:
         ver = _pkg_version("nextcloud-access-broker")
     except PackageNotFoundError:
         ver = "0.1.0"
+    # D6h: append the baked commit hash when present (written by the
+    # Dockerfile build arg). '0.1.0+4bbe33c' style, semver build metadata.
+    from pathlib import Path
+
+    commit_file = Path(__file__).with_name("COMMIT")
+    if commit_file.exists():
+        commit = commit_file.read_text().strip()
+        if commit and commit != "unknown":
+            ver = f"{ver}+{commit[:7]}"
     return MCPServer(name="nextcloud-access-broker", version=ver)
 
 
@@ -203,6 +212,27 @@ class BrokerServer:
     async def check_access(self, instance: str) -> dict:
         return await self._check_access(instance)
 
+    async def _list_instances(self) -> dict:
+        """D6.5: agent-facing instance discovery. Reveals configured
+        instance NAMES and their discovery flag only — never URLs,
+        usernames, or credentials. Source of truth is the store's
+        allowlist (set from config at startup; config.py refuses to
+        boot with zero instances). Deterministic order so agents and
+        tests can rely on it."""
+        names = sorted(self.store.allowed_instances or set())
+        return {
+            "status": "ok",
+            "result": {
+                "instances": [
+                    {"name": n, "discovery": n in self.layer.discovery_instances}
+                    for n in names
+                ]
+            },
+        }
+
+    async def list_instances(self) -> dict:
+        return await self._list_instances()
+
     async def list(self, instance: str, path: str) -> dict:
         return self._op(self.layer.list, instance, path)
 
@@ -264,13 +294,14 @@ class BrokerServer:
 
 
 AGENT_TOOLS = (
-    "request_access", "check_access", "list", "move", "trash", "mkdir",
+    "request_access", "check_access", "list_instances", "list", "move", "trash", "mkdir",
 )
 """The discovery/control surface (/mcp, agent token). File CONTENT tools
 (read, write) are deliberately absent: D5 — file content never transits
 the LLM context window. Agents that cannot see read/write cannot be
 tempted to call them; enforcement is completed by the transfer surface's
-separate token in run.py."""
+separate token in run.py. list_instances (D6.5) makes configured instance
+names legible: name + discovery flag only, no credential material."""
 
 TRANSFER_TOOLS = (
     "check_access", "read", "write", "checkout", "checkin",
@@ -305,6 +336,11 @@ def build_app(server: BrokerServer, tools: tuple[str, ...] = AGENT_TOOLS) -> MCP
     async def check_access(instance: str) -> dict:
         """Current active grants for this instance (scope introspection)."""
         return await server.check_access(instance=instance)
+
+    async def list_instances() -> dict:
+        """D6.5: configured instance names + discovery flags. Names only;
+        no URLs, usernames, or credentials. Agent surface only."""
+        return await server.list_instances()
 
     async def list(instance: str, path: str) -> dict:
         """List a folder's contents. Requires an active READ grant."""
@@ -351,8 +387,8 @@ def build_app(server: BrokerServer, tools: tuple[str, ...] = AGENT_TOOLS) -> MCP
         )
 
     for fn in (
-        request_access, check_access, list, read, write, move, trash,
-        mkdir, checkout, checkin,
+        request_access, check_access, list_instances, list, read, write,
+        move, trash, mkdir, checkout, checkin,
     ):
         if fn.__name__ not in tools:
             continue
