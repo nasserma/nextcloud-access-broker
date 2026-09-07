@@ -40,6 +40,14 @@ First complete implementation: the human-gated access broker.
   unconfigured instances are refused outright.
 - Audit chain detects truncation, reordering, edits, and checkpoint
   tampering.
+- Multi-item grants pair each item's path with its own mode at the
+  wall (`broker/nextcloud.py`). Earlier builds paired every item's
+  mode with the first item's path: items beyond the first were
+  unreachable despite human approval, and a write item widened the
+  first item's path scope (a write grant on one file silently
+  authorized writes anywhere under another item's path). Found during
+  the first live multi-instance test (2026-09-07); regression battery
+  in `tests/test_d67_multitem_grants.py`, both wall sites covered.
 
 ### Known limitations
 - Single approver (no quorum).

@@ -64,7 +64,16 @@ def _validate_bind_host(bind_host: str | None):
 def build_server(settings: dict) -> MCPServer:
     """Factory validating the bind guard before anything is built."""
     _validate_bind_host(settings.get("bind_host"))
-    return MCPServer(name="nextcloud-access-broker")
+    # D6.6 fix: report the real package version. The SDK defaults to an
+    # empty string, which made deployed builds indistinguishable from
+    # each other during the Sep 7 multi-instance live test.
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+    try:
+        ver = _pkg_version("nextcloud-access-broker")
+    except PackageNotFoundError:
+        ver = "0.1.0"
+    return MCPServer(name="nextcloud-access-broker", version=ver)
 
 
 class BrokerServer:

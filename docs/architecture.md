@@ -54,6 +54,14 @@ The wall lives inside the WebDAV layer, not in the MCP tools: no
 caller can reach a transport verb without passing through it, and no
 test may mock it.
 
+The layer flattens each grant record into per-item `Grant` entries
+before calling `check_access`: every item's PATH pairs with that
+item's OWN mode. A multi-item grant therefore grants exactly the
+union of its approved (path, mode) pairs — nothing wider. (Builds
+before 0.1.0 paired every item's mode with the first item's path,
+which both hid later items and widened the first item's scope under
+later write modes; fixed and regression-tested, see CHANGELOG.)
+
 ## Grant lifecycle
 
 pending --approve--> active --expiry--> expired

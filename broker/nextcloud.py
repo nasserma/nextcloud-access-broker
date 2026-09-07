@@ -180,8 +180,13 @@ class NextcloudLayer:
         if norm is None:
             self._audit_refusal(instance, path, mode, "forbidden namespace")
             raise AccessRefused("path is in a forbidden namespace")
+        # D6.7 fix: pair EACH item's path with ITS OWN mode. The old code
+        # used rec.path (first item only) for every entry, so multi-item
+        # grants silently granted item[0]'s path under every item's mode
+        # (privilege escalation: a write item widened item[0]'s scope)
+        # and item[1+]'s paths were unreachable despite approval.
         grants = [
-            Grant(path=rec.path, mode=item["mode"], expires_at=rec.expires_at, id=rec.id)
+            Grant(path=item["path"], mode=item["mode"], expires_at=rec.expires_at, id=rec.id)
             for rec in self._store.active_grants(instance=instance)
             for item in rec.items
         ]
@@ -296,11 +301,12 @@ class NextcloudLayer:
     def _authorized_read(self, instance: str, norm: str):
         """Wall check for the grant-gated list path (shares _authorized
         logic with a pre-normalized path)."""
+        # D6.7 fix: same per-item pairing as _authorized (first-item path
+        # used to swallow every item's mode, breaking multi-item grants).
         grants = [
-            Grant(path=rec.path, mode=item["mode"], expires_at=rec.expires_at, id=rec.id)
+            Grant(path=item["path"], mode=item["mode"], expires_at=rec.expires_at, id=rec.id)
             for rec in self._store.active_grants(instance=instance)
             for item in rec.items
-            if rec.path is not None
         ]
         decision = check_access(norm, READ, grants, self._now())
         if not decision.allowed:
