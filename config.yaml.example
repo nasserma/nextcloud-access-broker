@@ -1,0 +1,90 @@
+# Nextcloud Access Broker configuration.
+# Copy to config.yaml and fill in. NEVER commit a filled config.yaml.
+
+# The Matrix room where approval requests are posted.
+# Internal room ID (format !characters:server). The room must be private,
+# and contain exactly two members: the approver and the bot.
+matrix:
+  homeserver: "https://matrix.example.com"
+  bot_user: "@broker:matrix.example.com"
+  # Secrets live directly in this file (design doc: one config file).
+  # Optional: bot_token_env: "BROKER_MATRIX_TOKEN" for env indirection.
+  bot_token: "FILL-IN-BOT-ACCESS-TOKEN"
+  room_id: "!FILL-IN-ROOM-ID:matrix.example.com"
+  # Exactly ONE Matrix user ID may approve anything. Everyone else is
+  # ignored, even in the room.
+  approver: "@owner:matrix.example.com"
+
+# The MCP client (the agent) authenticates with this token. Generate one:
+#   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# TWO tokens, two surfaces (D5):
+#   - token:        the /mcp discovery/control surface (list, grants).
+#   - transfer_token: the /transfer content surface (read/write/
+#     checkout/checkin), held ONLY by the broker CLI on the client
+#     host. File content never transits the LLM context window: the
+#     agent token cannot call content tools at all (they are not even
+#     registered on its surface).
+# The broker REFUSES TO START if transfer_token is missing, under 32
+# characters, or equal to token — an identical pair would silently
+# collapse the separation.
+agent:
+  token: "FILL-IN-AGENT-TOKEN"
+  transfer_token: "FILL-IN-TRANSFER-TOKEN"
+  # Env indirection is also supported (either wins over nothing):
+  # transfer_token_env: "BROKER_TRANSFER_TOKEN"
+
+# Network binding. The application owns the PORT only. Which interface
+# the service is reachable on is the HOST's decision (see the compose
+# file's ports mapping: one interface address of your choosing —
+# tunnel, LAN, or loopback behind a reverse proxy). bind_host is
+# optional and only meaningful in host-network mode; if given,
+# wildcard binds are refused as defense in depth.
+server:
+  port: 8765
+  # bind_host: "10.64.0.1"   # host-network mode only; omit in bridge mode
+
+# Grant lifecycle defaults (design doc 3.4).
+lifecycle:
+  pending_timeout_hours: 12
+  default_grant_hours: 24
+
+# Audit log location.
+audit:
+  path: "/data/audit.log"
+
+# Operational logging (docker logs / stderr). Levels: info, debug.
+# EVERY log line is scrubbed of secret values by construction, so logs
+# are safe to share for remote debugging at any level.
+logging:
+  level: "info"
+
+# Nextcloud instances. Each block: one instance, one app password.
+# An instance that is absent here is REFUSED by the broker outright.
+# Wire the LEAST critical instance first; add others by editing this
+# file on the host and restarting the container.
+#
+# discovery (optional, default false): when true, the agent can LIST
+# this instance's directories WITHOUT a grant - standing access to
+# file NAMES, folder structure, sizes, and dates. File CONTENTS stay
+# grant-gated either way. Browsing is free; opening is not. Every
+# listing is audit-logged. Consider: file names can reveal a lot on
+# their own (a name like "salary-review.docx" says something without
+# being opened). Enable on instances whose names are comfortable to
+# expose; leave false where names are sensitive (then listing needs
+# a READ grant like everything else).
+instances:
+  personal:
+    url: "https://cloud.example.com"
+    username: "your-username"
+    password: "your-app-password"
+    discovery: false
+  # work:
+  #   url: "https://cloud.example-work.com"
+  #   username: "your-username"
+  #   password: "your-app-password"
+  #   discovery: false
+  # org:
+  #   url: "https://cloud.example-org.com"
+  #   username: "your-username"
+  #   password: "your-app-password"
+  #   discovery: false

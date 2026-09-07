@@ -1,0 +1,43 @@
+[project]
+name = "nextcloud-access-broker"
+version = "0.1.0"
+description = "Human-gated, path-scoped MCP file access broker for Nextcloud"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0",
+    "matrix-nio>=0.25",
+    "webdavclient3>=3.14",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+broker = "broker.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["broker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["broker"]
+branch = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

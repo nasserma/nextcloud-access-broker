@@ -1,0 +1,24 @@
+# Example docker-compose.yml for the Nextcloud Access Broker.
+# Copy this file to docker-compose.yml and edit for your host.
+#
+# THE HOST DECIDES EXPOSURE. The ports mapping below publishes the
+# broker on ONE specific interface address — replace it with the
+# address of whatever network segment you want the broker reachable
+# on. Options: a tunnel/VPN interface address, your LAN IP, or
+# 127.0.0.1 if you front it with your own reverse proxy.
+# AVOID 0.0.0.0 unless you have deliberately decided to expose the
+# broker to every interface on this machine.
+
+services:
+  broker:
+    build: .
+    container_name: nextcloud-access-broker
+    restart: unless-stopped
+    # Mount your local secrets/config — never bake them into the image.
+    # volumes:
+    #   - ./config.yaml:/app/config.yaml:ro
+    #   - ./data:/app/data
+    ports:
+      # Replace <HOST_ADDRESS> with the interface address you chose.
+      - "<HOST_ADDRESS>:8765:8765"
+    # See docs/serviceSupervision.md for supervision and healthcheck notes.
