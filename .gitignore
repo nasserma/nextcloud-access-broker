@@ -12,3 +12,6 @@ dist/
 config.yaml
 data/
 docker-compose.yml
+
+# Local-only record (user decision: never committed/published)
+DEVIATIONS.md
