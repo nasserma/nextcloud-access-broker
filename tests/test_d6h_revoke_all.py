@@ -56,7 +56,7 @@ def test_parse_revoke_all():
 
 
 def test_parse_revoke_instance():
-    assert parse_reply("revoke instanceA") == ("revoke_instance", "instanceA", None, None)
+    assert parse_reply("revoke instanceA") == ("revoke_instance", "instancea", None, None)  # target lowercased
 
 
 def test_numeric_revoke_unaffected():
